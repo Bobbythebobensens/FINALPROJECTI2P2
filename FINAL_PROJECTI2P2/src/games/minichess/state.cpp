@@ -119,6 +119,9 @@ int State::evaluate(
                     oppn_score += kp_material[oppn_piece];
                     int oppn_pst_r = (this->player == 0) ? (BOARD_H - 1 - r) : r;
                     oppn_score += pst[oppn_piece - 1][oppn_pst_r][c];
+                    if(self_kr >= 0){
+                        oppn_score += king_tropism(oppn_piece, r, c, self_kr, self_kc);
+                    }
                 }
             }
         }
