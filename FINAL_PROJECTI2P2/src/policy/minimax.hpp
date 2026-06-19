@@ -1,4 +1,5 @@
 #pragma once
+#include <vector>
 #include "search_types.hpp"
 #include "game_history.hpp"
 
@@ -18,22 +19,38 @@ struct MMParams {
 
 class MiniMax{
 public:
+    static int quiesce(
+        State* state,
+        int alpha,
+        int beta,
+        GameHistory& history,
+        int ply,
+        SearchContext& ctx,
+        const MMParams& p,
+        int qdepth = 0
+    );
+
     static int eval_ctx(
-        State *state,
+        State* state,
         int depth,
         int alpha,
         int beta,
         GameHistory& history,
         int ply,
         SearchContext& ctx,
-        const MMParams& p
+        const MMParams& p,
+        std::vector<Move>* pv_out = nullptr
     );
+
     static SearchResult search(
-        State *state,
+        State* state,
         int depth,
         GameHistory& history,
         SearchContext& ctx
     );
+
+    static void clear_tt();
+    static void begin_search();
 
     static ParamMap default_params();
     static std::vector<ParamDef> param_defs();

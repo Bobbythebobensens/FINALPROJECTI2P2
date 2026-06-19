@@ -14,6 +14,7 @@
 #include "search_types.hpp"
 #include "../policy/registry.hpp"
 #include "../policy/game_history.hpp"
+#include "../policy/minimax.hpp"
 
 namespace ubgi {
 
@@ -312,6 +313,17 @@ static void do_search(
 
     auto search_start = std::chrono::high_resolution_clock::now();
 
+    ctx.start_time = search_start;
+    if (infinite) {
+        ctx.time_limit_ms = 0;
+    } else if (movetime_ms > 0) {
+        ctx.time_limit_ms = std::min(movetime_ms, (int64_t)1800);
+    } else {
+        ctx.time_limit_ms = 1800;
+    }
+
+    MiniMax::begin_search();
+
     /* === Root move partial-result callback === */
     ctx.on_root_update = [&](const RootUpdate& upd){
         if(my_gen != g_search_gen.load()){
@@ -351,7 +363,7 @@ static void do_search(
         auto depth_start = std::chrono::high_resolution_clock::now();
         SearchResult result = g_algo->search(&state, depth, history, ctx);
 
-        if(!alive() && depth > 1){
+        if(!alive()){
             break;
         }
 
@@ -455,7 +467,7 @@ static void do_search(
         if(!alive()){
             break;
         }
-        if(movetime_ms > 0 && total_ms * 2 >= movetime_ms){
+        if(movetime_ms > 0 && total_ms * 5 >= movetime_ms * 4){
             break;
         }
         if(result.score >= P_MAX - 100 || result.score <= M_MAX + 100){
@@ -483,6 +495,11 @@ static void cmd_go(std::istringstream& iss){
     int64_t movetime_ms = 0;
     bool infinite = false;
 
+    int64_t wtime = -1;
+    int64_t btime = -1;
+    int64_t winc = 0;
+    int64_t binc = 0;
+
     std::string token;
     while(iss >> token){
         if(token == "depth"){
@@ -491,11 +508,28 @@ static void cmd_go(std::istringstream& iss){
             iss >> movetime_ms;
         }else if(token == "infinite"){
             infinite = true;
+        }else if(token == "wtime"){
+            iss >> wtime;
+        }else if(token == "btime"){
+            iss >> btime;
+        }else if(token == "winc"){
+            iss >> winc;
+        }else if(token == "binc"){
+            iss >> binc;
+        }
+    }
+
+    if(movetime_ms == 0 && !infinite){
+        int64_t my_time = (g_player == 0) ? wtime : btime;
+        int64_t my_inc = (g_player == 0) ? winc : binc;
+        if(my_time > 0){
+            movetime_ms = my_time / 20 + my_inc / 2;
         }
     }
 
     if(max_depth == 0 && movetime_ms == 0 && !infinite){
-        max_depth = 6;
+        // Default time budget if nothing is specified
+        movetime_ms = 1500;
     }
 
     SearchContext ctx;
@@ -674,6 +708,7 @@ void loop(){
             g_player = 0;
             g_step = 0;
             g_history.clear();
+            MiniMax::clear_tt();
         }else if(cmd == "d"){
             cmd_display();
         }else if(cmd == "quit"){
