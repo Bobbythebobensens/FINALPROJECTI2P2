@@ -329,8 +329,6 @@ static void do_search(
         if(my_gen != g_search_gen.load()){
             return;
         }
-        best_move = upd.best_move;
-        g_best_move = upd.best_move;
 
         auto now = std::chrono::high_resolution_clock::now();
         int64_t elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(

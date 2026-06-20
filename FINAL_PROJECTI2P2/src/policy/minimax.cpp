@@ -451,6 +451,17 @@ SearchResult MiniMax::search(
     if(!state->legal_actions.size()){
         state->get_legal_actions();
     }
+    if(!state->legal_actions.empty()){
+        result.best_move = state->legal_actions[0];
+    }
+
+    struct RootMoveInfo {
+        Move move;
+        int score;
+        std::vector<Move> pv;
+    };
+    std::vector<RootMoveInfo> searched_moves;
+    searched_moves.reserve(state->legal_actions.size());
 
     int best_score = M_MAX - 10;
     int alpha = M_MAX;
@@ -534,6 +545,8 @@ SearchResult MiniMax::search(
             break;
         }
 
+        searched_moves.push_back({action, score, child_pv});
+
         if(score > best_score){
             best_score = score;
             result.best_move = action;
@@ -556,10 +569,45 @@ SearchResult MiniMax::search(
         move_index++;
     }
 
-    result.score = best_score;
+    // Avoid repetition draws by picking the best non-repeating move if possible
+    if (!searched_moves.empty()) {
+        std::stable_sort(searched_moves.begin(), searched_moves.end(),
+            [](const RootMoveInfo& a, const RootMoveInfo& b){
+                return a.score > b.score;
+            });
+
+        bool found = false;
+        for (const auto& rm : searched_moves) {
+            State* next_state_ptr = static_cast<State*>(state->next_state(rm.move));
+            if (history.count(next_state_ptr->hash()) == 0) {
+                result.best_move = rm.move;
+                result.score = rm.score;
+                result.pv = rm.pv;
+                result.pv.insert(result.pv.begin(), rm.move);
+                found = true;
+                delete next_state_ptr;
+                break;
+            }
+            delete next_state_ptr;
+        }
+
+        if (!found) {
+            // All moves repeat; fallback to the first best move
+            result.best_move = searched_moves[0].move;
+            result.score = searched_moves[0].score;
+            result.pv = searched_moves[0].pv;
+            result.pv.insert(result.pv.begin(), searched_moves[0].move);
+        }
+    } else {
+        result.score = best_score;
+        result.pv = root_pv.empty() ? std::vector<Move>{result.best_move} : root_pv;
+    }
+
     result.seldepth = ctx.seldepth;
     result.nodes = ctx.nodes;
-    result.pv = root_pv.empty() ? std::vector<Move>{result.best_move} : root_pv;
+    if (result.pv.empty()) {
+        result.pv = {result.best_move};
+    }
     return result;
 }
 
