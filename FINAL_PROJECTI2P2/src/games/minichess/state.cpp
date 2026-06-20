@@ -195,7 +195,8 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
 
   auto self_board = this->board.board[this->player];
   auto oppn_board = this->board.board[1 - this->player];
-  int self_score = 0, oppn_score = 0;
+  int mg_self_score = 0, mg_oppn_score = 0;
+  int eg_self_score = 0, eg_oppn_score = 0;
 
   // Search for Kings, count pawns, and determine if it's an endgame phase
   int self_kr = -1, self_kc = -1;
@@ -203,7 +204,9 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
   int self_pawns_on_file[BOARD_W] = {0};
   int oppn_pawns_on_file[BOARD_W] = {0};
   int self_queens = 0, oppn_queens = 0;
-  int self_major = 0, oppn_major = 0;
+  int self_rooks = 0, oppn_rooks = 0;
+  int self_knights = 0, oppn_knights = 0;
+  int self_bishops = 0, oppn_bishops = 0;
 
   int self_pawn_count = 0;
   Point self_pawns[5];
@@ -229,8 +232,12 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
           }
         } else if (p0 == 5) {
           self_queens++;
-        } else if (p0 == 2 || p0 == 3 || p0 == 4) {
-          self_major++;
+        } else if (p0 == 2) {
+          self_rooks++;
+        } else if (p0 == 3) {
+          self_knights++;
+        } else if (p0 == 4) {
+          self_bishops++;
         }
       }
 
@@ -248,14 +255,23 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
           }
         } else if (p1 == 5) {
           oppn_queens++;
-        } else if (p1 == 2 || p1 == 3 || p1 == 4) {
-          oppn_major++;
+        } else if (p1 == 2) {
+          oppn_rooks++;
+        } else if (p1 == 3) {
+          oppn_knights++;
+        } else if (p1 == 4) {
+          oppn_bishops++;
         }
       }
     }
   }
 
-  bool is_endgame = (oppn_queens == 0 && (self_major + oppn_major) <= 3);
+  int current_phase =
+      (self_queens + oppn_queens) * 4 + (self_rooks + oppn_rooks) * 2 +
+      (self_knights + oppn_knights) * 1 + (self_bishops + oppn_bishops) * 1;
+  if (current_phase > 16) {
+    current_phase = 16;
+  }
 
   if (use_kp_eval) {
     /* === KP eval: material + PST + tropism === */
@@ -263,28 +279,42 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
       for (int c = 0; c < BOARD_W; c++) {
         int self_piece = self_board[r][c];
         if (self_piece) {
-          self_score += kp_material[self_piece];
+          int mat = kp_material[self_piece];
+          mg_self_score += mat;
+          eg_self_score += mat;
           int self_pst_r = (this->player == 0) ? r : (BOARD_H - 1 - r);
-          if (self_piece == 6 && is_endgame) {
-            self_score += 5 * pst_king_endgame[self_pst_r][c];
+          if (self_piece == 6) {
+            mg_self_score += 5 * pst[5][self_pst_r][c];
+            eg_self_score += 5 * pst_king_endgame[self_pst_r][c];
           } else {
-            self_score += 5 * pst[self_piece - 1][self_pst_r][c];
+            int pst_val = 5 * pst[self_piece - 1][self_pst_r][c];
+            mg_self_score += pst_val;
+            eg_self_score += pst_val;
           }
           if (oppn_kr >= 0) {
-            self_score += 5 * king_tropism(self_piece, r, c, oppn_kr, oppn_kc);
+            int trop = 5 * king_tropism(self_piece, r, c, oppn_kr, oppn_kc);
+            mg_self_score += trop;
+            eg_self_score += trop;
           }
         }
         int oppn_piece = oppn_board[r][c];
         if (oppn_piece) {
-          oppn_score += kp_material[oppn_piece];
+          int mat = kp_material[oppn_piece];
+          mg_oppn_score += mat;
+          eg_oppn_score += mat;
           int oppn_pst_r = (this->player == 0) ? (BOARD_H - 1 - r) : r;
-          if (oppn_piece == 6 && is_endgame) {
-            oppn_score += 5 * pst_king_endgame[oppn_pst_r][c];
+          if (oppn_piece == 6) {
+            mg_oppn_score += 5 * pst[5][oppn_pst_r][c];
+            eg_oppn_score += 5 * pst_king_endgame[oppn_pst_r][c];
           } else {
-            oppn_score += 5 * pst[oppn_piece - 1][oppn_pst_r][c];
+            int pst_val = 5 * pst[oppn_piece - 1][oppn_pst_r][c];
+            mg_oppn_score += pst_val;
+            eg_oppn_score += pst_val;
           }
           if (self_kr >= 0) {
-            oppn_score += 5 * king_tropism(oppn_piece, r, c, self_kr, self_kc);
+            int trop = 5 * king_tropism(oppn_piece, r, c, self_kr, self_kc);
+            mg_oppn_score += trop;
+            eg_oppn_score += trop;
           }
         }
       }
@@ -295,19 +325,21 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
       for (int c = 0; c < BOARD_W; c++) {
         int self_piece = self_board[r][c];
         if (self_piece) {
-          self_score += simple_material[self_piece];
+          mg_self_score += simple_material[self_piece];
+          eg_self_score += simple_material[self_piece];
         }
         int oppn_piece = oppn_board[r][c];
         if (oppn_piece) {
-          oppn_score += simple_material[oppn_piece];
+          mg_oppn_score += simple_material[oppn_piece];
+          eg_oppn_score += simple_material[oppn_piece];
         }
       }
     }
   }
 
   // Positional / structural evaluations (accumulated in centipawns)
-  int self_centipawns = 0;
-  int oppn_centipawns = 0;
+  int mg_self_centipawns = 0, mg_oppn_centipawns = 0;
+  int eg_self_centipawns = 0, eg_oppn_centipawns = 0;
 
   // Self positional evaluations
   for (int i = 0; i < self_pawn_count; i++) {
@@ -332,14 +364,17 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
     }
     if (passed) {
       int dist = (this->player == 0) ? r : (BOARD_H - 1 - r);
+      int bonus = 0;
       if (dist == 1)
-        self_centipawns += 150;
+        bonus = 150;
       else if (dist == 2)
-        self_centipawns += 80;
+        bonus = 80;
       else if (dist == 3)
-        self_centipawns += 40;
+        bonus = 40;
       else if (dist == 4)
-        self_centipawns += 20;
+        bonus = 20;
+      mg_self_centipawns += bonus;
+      eg_self_centipawns += bonus;
     }
 
     // Connected pawn check
@@ -354,7 +389,8 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
       }
     }
     if (connected) {
-      self_centipawns += 15;
+      mg_self_centipawns += 15;
+      eg_self_centipawns += 15;
     }
 
     // Advanced & safe pawn check
@@ -395,23 +431,26 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
         }
 
         if (!attacked) {
+          int bonus = 0;
           if (dist == 3)
-            self_centipawns += 15;
+            bonus = 15;
           else if (dist == 2)
-            self_centipawns += 30;
+            bonus = 30;
           else if (dist == 1)
-            self_centipawns += 60;
+            bonus = 60;
+          mg_self_centipawns += bonus;
+          eg_self_centipawns += bonus;
         }
       }
     }
 
-    // Endgame king proximity to friendly pawns
-    if (is_endgame && self_kr >= 0) {
+    // King proximity to friendly pawns
+    if (self_kr >= 0) {
       int k_dist = std::max(std::abs(self_kr - r), std::abs(self_kc - c));
       if (k_dist == 1)
-        self_centipawns += 10;
+        eg_self_centipawns += 10;
       else if (k_dist == 2)
-        self_centipawns += 5;
+        eg_self_centipawns += 5;
     }
   }
 
@@ -439,14 +478,17 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
     }
     if (passed) {
       int dist = (oppn_player == 0) ? r : (BOARD_H - 1 - r);
+      int bonus = 0;
       if (dist == 1)
-        oppn_centipawns += 150;
+        bonus = 150;
       else if (dist == 2)
-        oppn_centipawns += 80;
+        bonus = 80;
       else if (dist == 3)
-        oppn_centipawns += 40;
+        bonus = 40;
       else if (dist == 4)
-        oppn_centipawns += 20;
+        bonus = 20;
+      mg_oppn_centipawns += bonus;
+      eg_oppn_centipawns += bonus;
     }
 
     // Connected pawn check
@@ -461,7 +503,8 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
       }
     }
     if (connected) {
-      oppn_centipawns += 15;
+      mg_oppn_centipawns += 15;
+      eg_oppn_centipawns += 15;
     }
 
     // Advanced & safe pawn check
@@ -502,23 +545,26 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
         }
 
         if (!attacked) {
+          int bonus = 0;
           if (dist == 3)
-            oppn_centipawns += 15;
+            bonus = 15;
           else if (dist == 2)
-            oppn_centipawns += 30;
+            bonus = 30;
           else if (dist == 1)
-            oppn_centipawns += 60;
+            bonus = 60;
+          mg_oppn_centipawns += bonus;
+          eg_oppn_centipawns += bonus;
         }
       }
     }
 
-    // Endgame king proximity to friendly pawns
-    if (is_endgame && oppn_kr >= 0) {
+    // King proximity to friendly pawns
+    if (oppn_kr >= 0) {
       int k_dist = std::max(std::abs(oppn_kr - r), std::abs(oppn_kc - c));
       if (k_dist == 1)
-        oppn_centipawns += 10;
+        eg_oppn_centipawns += 10;
       else if (k_dist == 2)
-        oppn_centipawns += 5;
+        eg_oppn_centipawns += 5;
     }
   }
 
@@ -555,20 +601,44 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
             }
           }
         }
-        self_centipawns += count * 3;
-        if (is_endgame) {
-          if (self_piece == 2) { // Rook
-            self_centipawns += count * 5;
-          } else { // Bishop
-            self_centipawns += count * 2;
-          }
+        mg_self_centipawns += count * 3;
+        eg_self_centipawns += count * 3;
+        if (self_piece == 2) { // Rook
+          eg_self_centipawns += count * 5;
+        } else { // Bishop
+          eg_self_centipawns += count * 2;
         }
       } else if (self_piece == 3) { // Knight
         int sq = BB_SQ(r, c);
         int count = __builtin_popcount(bb_knight[sq] & ~self_occ);
-        self_centipawns += count * 3;
-        if (is_endgame) {
-          self_centipawns += count * 2;
+        mg_self_centipawns += count * 3;
+        eg_self_centipawns += count * 3;
+        eg_self_centipawns += count * 2;
+
+        // Knight outpost heuristic (permanent: both mg and eg)
+        if ((r == 2 || r == 3) && (c == 1 || c == 2 || c == 3)) {
+          bool protected_by_pawn = false;
+          if (this->player == 0) { // White
+            int pawn_r = r + 1;
+            if (pawn_r < BOARD_H) {
+              if (c > 0 && self_board[pawn_r][c - 1] == 1)
+                protected_by_pawn = true;
+              if (c < BOARD_W - 1 && self_board[pawn_r][c + 1] == 1)
+                protected_by_pawn = true;
+            }
+          } else { // Black
+            int pawn_r = r - 1;
+            if (pawn_r >= 0) {
+              if (c > 0 && self_board[pawn_r][c - 1] == 1)
+                protected_by_pawn = true;
+              if (c < BOARD_W - 1 && self_board[pawn_r][c + 1] == 1)
+                protected_by_pawn = true;
+            }
+          }
+          if (protected_by_pawn) {
+            mg_self_centipawns += 35;
+            eg_self_centipawns += 35;
+          }
         }
       }
 
@@ -598,31 +668,64 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
             }
           }
         }
-        oppn_centipawns += count * 3;
-        if (is_endgame) {
-          if (oppn_piece == 2) { // Rook
-            oppn_centipawns += count * 5;
-          } else { // Bishop
-            oppn_centipawns += count * 2;
-          }
+        mg_oppn_centipawns += count * 3;
+        eg_oppn_centipawns += count * 3;
+        if (oppn_piece == 2) { // Rook
+          eg_oppn_centipawns += count * 5;
+        } else { // Bishop
+          eg_oppn_centipawns += count * 2;
         }
       } else if (oppn_piece == 3) { // Knight
         int sq = BB_SQ(r, c);
         int count = __builtin_popcount(bb_knight[sq] & ~oppn_occ);
-        oppn_centipawns += count * 3;
-        if (is_endgame) {
-          oppn_centipawns += count * 2;
+        mg_oppn_centipawns += count * 3;
+        eg_oppn_centipawns += count * 3;
+        eg_oppn_centipawns += count * 2;
+
+        // Knight outpost heuristic (permanent: both mg and eg)
+        if ((r == 2 || r == 3) && (c == 1 || c == 2 || c == 3)) {
+          bool protected_by_pawn = false;
+          if (oppn_player == 0) { // Opponent White
+            int pawn_r = r + 1;
+            if (pawn_r < BOARD_H) {
+              if (c > 0 && oppn_board[pawn_r][c - 1] == 1)
+                protected_by_pawn = true;
+              if (c < BOARD_W - 1 && oppn_board[pawn_r][c + 1] == 1)
+                protected_by_pawn = true;
+            }
+          } else { // Opponent Black
+            int pawn_r = r - 1;
+            if (pawn_r >= 0) {
+              if (c > 0 && oppn_board[pawn_r][c - 1] == 1)
+                protected_by_pawn = true;
+              if (c < BOARD_W - 1 && oppn_board[pawn_r][c + 1] == 1)
+                protected_by_pawn = true;
+            }
+          }
+          if (protected_by_pawn) {
+            mg_oppn_centipawns += 35;
+            eg_oppn_centipawns += 35;
+          }
         }
       }
     }
   }
 
-  int positional_diff = 0;
+  int mg_positional_diff = 0;
+  int eg_positional_diff = 0;
   if (use_kp_eval) {
-    positional_diff = self_centipawns - oppn_centipawns;
+    mg_positional_diff = mg_self_centipawns - mg_oppn_centipawns;
+    eg_positional_diff = eg_self_centipawns - eg_oppn_centipawns;
   } else {
-    positional_diff = (self_centipawns - oppn_centipawns) / 10;
+    mg_positional_diff = (mg_self_centipawns - mg_oppn_centipawns) / 10;
+    eg_positional_diff = (eg_self_centipawns - eg_oppn_centipawns) / 10;
   }
+
+  int mg_score = (mg_self_score - mg_oppn_score) + mg_positional_diff;
+  int eg_score = (eg_self_score - eg_oppn_score) + eg_positional_diff;
+
+  int final_eval =
+      ((mg_score * current_phase) + (eg_score * (16 - current_phase))) / 16;
 
   int bonus = 0;
 
@@ -638,7 +741,7 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
     bonus += 2 * (self_mobility - oppn_mobility);
   }
 
-  return self_score - oppn_score + positional_diff + bonus;
+  return final_eval + bonus;
 }
 
 /*============================================================
