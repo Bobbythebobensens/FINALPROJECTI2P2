@@ -727,6 +727,30 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
   int final_eval =
       ((mg_score * current_phase) + (eg_score * (16 - current_phase))) / 16;
 
+  // Executioner Mating Net heuristic
+  int total_major = self_rooks + oppn_rooks + self_knights + oppn_knights + self_bishops + oppn_bishops;
+  if (final_eval > 200 && oppn_queens == 0 && total_major <= 3) {
+    if (self_kr >= 0 && oppn_kr >= 0) {
+      int manhattan_distance = std::abs(self_kc - oppn_kc) + std::abs(self_kr - oppn_kr);
+      final_eval += (10 - manhattan_distance) * 10;
+      if (oppn_kc == 0 || oppn_kc == 4 || oppn_kr == 0 || oppn_kr == 5) {
+        final_eval += 30;
+      } else {
+        final_eval -= 20;
+      }
+    }
+  } else if (final_eval < -200 && self_queens == 0 && total_major <= 3) {
+    if (self_kr >= 0 && oppn_kr >= 0) {
+      int manhattan_distance = std::abs(self_kc - oppn_kc) + std::abs(self_kr - oppn_kr);
+      final_eval -= (10 - manhattan_distance) * 10;
+      if (self_kc == 0 || self_kc == 4 || self_kr == 0 || self_kr == 5) {
+        final_eval -= 30;
+      } else {
+        final_eval += 20;
+      }
+    }
+  }
+
   int bonus = 0;
 
   /* === Mobility bonus === */
