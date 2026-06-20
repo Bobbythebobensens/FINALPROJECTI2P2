@@ -207,6 +207,8 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
   int self_rooks = 0, oppn_rooks = 0;
   int self_knights = 0, oppn_knights = 0;
   int self_bishops = 0, oppn_bishops = 0;
+  int self_bishop_r = -1, self_bishop_c = -1;
+  int oppn_bishop_r = -1, oppn_bishop_c = -1;
 
   int self_pawn_count = 0;
   Point self_pawns[5];
@@ -238,6 +240,8 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
           self_knights++;
         } else if (p0 == 4) {
           self_bishops++;
+          self_bishop_r = r;
+          self_bishop_c = c;
         }
       }
 
@@ -261,6 +265,8 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
           oppn_knights++;
         } else if (p1 == 4) {
           oppn_bishops++;
+          oppn_bishop_r = r;
+          oppn_bishop_c = c;
         }
       }
     }
@@ -565,6 +571,32 @@ int State::evaluate(bool use_kp_eval, bool use_mobility,
         eg_oppn_centipawns += 10;
       else if (k_dist == 2)
         eg_oppn_centipawns += 5;
+    }
+  }
+
+  // Color Complex Domination for self
+  if (self_bishop_r >= 0) {
+    int bishop_color = (self_bishop_r + self_bishop_c) % 2;
+    for (int i = 0; i < self_pawn_count; i++) {
+      int p_r = self_pawns[i].first;
+      int p_c = self_pawns[i].second;
+      if ((p_r + p_c) % 2 != bishop_color) {
+        mg_self_centipawns += 10;
+        eg_self_centipawns += 10;
+      }
+    }
+  }
+
+  // Color Complex Domination for opponent
+  if (oppn_bishop_r >= 0) {
+    int bishop_color = (oppn_bishop_r + oppn_bishop_c) % 2;
+    for (int i = 0; i < oppn_pawn_count; i++) {
+      int p_r = oppn_pawns[i].first;
+      int p_c = oppn_pawns[i].second;
+      if ((p_r + p_c) % 2 != bishop_color) {
+        mg_oppn_centipawns += 10;
+        eg_oppn_centipawns += 10;
+      }
     }
   }
 
